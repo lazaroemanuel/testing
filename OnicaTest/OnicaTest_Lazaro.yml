@@ -1,0 +1,441 @@
+Description: This templete deploys the Onica Test
+
+Parameters: 
+  
+  OnicaTestEnv: 
+    Description: Onica Test Environment
+    Type: String
+    Default: Onica Test Env 
+  
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String 
+    Default: 10.192.0.0/16
+  
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet
+    Type: String
+    Default: 10.192.1.0/24
+  
+  PublicSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet
+    Type: String
+    Default: 10.192.2.0/24
+  
+  PrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet
+    Type: String
+    Default: 10.192.3.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet
+    Type: String
+    Default: 10.192.4.0/24
+  
+Resources:
+  # VPC Creation
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref 'VpcCIDR'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${OnicaTestEnv} VPC
+  
+  # First Private Subnet in the first AZ
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      CidrBlock: !Ref 'PrivateSubnet1CIDR'
+      MapPublicIpOnLaunch: 'False'
+      Tags:
+        - Key: Name
+          Value: !Sub ${OnicaTestEnv} PrivateSubnet1
+
+  # Second Private Subnet in the second AZ
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      CidrBlock: !Ref 'PrivateSubnet2CIDR'
+      MapPublicIpOnLaunch: 'False'
+      Tags:
+        - Key: Name
+          Value: !Sub ${OnicaTestEnv} PrivateSubnet2
+
+  # First Public Subnet in the first AZ
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      CidrBlock: !Ref 'PublicSubnet1CIDR'
+      MapPublicIpOnLaunch: 'True'
+      Tags:
+        - Key: Name
+          Value: !Sub ${OnicaTestEnv} PublicSubnet1
+
+  # Second Public Subnet in the second AZ
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      CidrBlock: !Ref 'PublicSubnet2CIDR'
+      MapPublicIpOnLaunch: 'True'
+      Tags:
+        - Key: Name
+          Value: !Sub ${OnicaTestEnv} PublicSubnet2
+  
+  # Gateway to Internet
+  InternetGateway: 
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: 'Name'
+          Value: !Sub ${OnicaTestEnv} InternetGW
+    
+  # Associate GW to VPC created
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref 'InternetGateway'
+      VpcId: !Ref 'VPC'
+  
+  # Create Public Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+  
+  # Create default Public Route 
+  PublicInternetRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+  
+  # Association Route Table to First PublicSubnet in 1st AZ
+  PublicRouteTableAssAZ1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'PublicSubnet1'
+      RouteTableId: !Ref 'PublicRouteTable'
+
+  # Association Route Table to Second PublicSubnet in 2nd AZ
+  PublicRouteTableAssAZ2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'PublicSubnet2'
+      RouteTableId: !Ref 'PublicRouteTable'
+
+  # NAT Public IP
+  NATPublicIp:
+    Type: AWS::EC2::EIP
+    DependsOn: VPC
+    Properties:
+      Domain: vpc
+  
+  # Private Nat GW 
+  PrivateNatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NATPublicIp
+    Properties:
+      AllocationId: !GetAtt NATPublicIp.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  # Private Route Table
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  # Create default private route
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref PrivateNatGateway
+
+  # Association Route Table to First PrivateSubnet in 1st AZ
+  PrivateRouteTableAssAZ1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Association Route Table to Second PrivateSubnet in 2nd AZ
+  PrivateRouteTableAssAZ2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # SecurityGroup to Access EC2 Instances from bastion
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Allow SSH and Port 80' 
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+          
+  # SecurityGroup to access to web service 
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Port 80 Allow Anywehere' 
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+
+  # Creation of group EC2 HTTP Instances
+  EC2InstanceDeploy:
+    Type: AWS::EC2::EC2Fleet
+    Properties:
+      ExcessCapacityTerminationPolicy: termination
+      LaunchTemplateConfigs:
+        - LaunchTemplateSpecification:
+            LaunchTemplateName: LaunchEC2WEBInst
+            Version: !GetAtt LaunchEC2WEBInst.LatestVersionNumber
+      OnDemandOptions:
+        AllocationStrategy: "lowest-price"
+      ReplaceUnhealthyInstances: True
+      TargetCapacitySpecification:
+        TotalTargetCapacity: 2
+        DefaultTargetCapacityType: "on-demand"
+      Type: maintain
+
+  # Creation ALB
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "OnicaLB"
+      Scheme: "internet-facing"
+      Type: "application" 
+      Subnets: 
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref ELBSecurityGroup
+      IpAddressType: "ipv4"
+
+  # Creation Group  and service to balance service
+  TargetGroupEC2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true 
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 15
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: "200"
+      Name: TargetGroupEC2
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+  
+  # Creation Listener to balance service
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: "HTTP"
+      DefaultActions:
+      -
+        TargetGroupArn: !Ref TargetGroupEC2
+        Type: "forward"
+
+  # Creation AutoScaling Group
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: ELBSecurityGroup
+    Properties:
+      AutoScalingGroupName: "ASG"
+      LaunchConfigurationName: !Ref AutoScalingLaunchConfig
+      MinSize: 2
+      MaxSize: 3
+      DesiredCapacity: 2
+      Cooldown: 300
+      TargetGroupARNs:
+        - !Ref TargetGroupEC2
+      HealthCheckType: "EC2"
+      HealthCheckGracePeriod: 300
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      TerminationPolicies:
+        - "Default"
+      ServiceLinkedRoleARN: !Ref "AWS::NoValue"
+
+  # Creation Policy CPU to Scaling Group
+  CPUasPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    DependsOn: AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: "TargetTrackingScaling"
+      EstimatedInstanceWarmup: 600
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: "ASGAverageCPUUtilization"
+        TargetValue: 70
+        DisableScaleIn: False
+        
+  # Deploy EC2 Web Instances Installing Apache
+  LaunchEC2WEBInst:
+    Type: AWS::EC2::LaunchTemplate
+    DependsOn: ELBSecurityGroup
+    Properties:
+      LaunchTemplateName: "LaunchEC2WEBInst"
+      LaunchTemplateData:
+        ImageId: ami-05d72852800cbf29e
+        KeyName: sshkey
+        SecurityGroupIds:
+          - !Ref ELBSecurityGroup
+        InstanceType: t2.micro
+        Monitoring: 
+          Enabled: true
+        TagSpecifications:
+          - ResourceType: "instance"
+            Tags: 
+              - Key: "AutoScalingGroupName"
+                Value: "ASG"
+              - Key: "ApplicationLoadBalancer"
+                Value: "HTTP-80-ALB" 
+        UserData:
+          'Fn::Base64': 
+            !Sub |
+              #!/bin/bash
+              yum -y update
+              # install apache
+              yum -y install httpd  
+              # start and enable httpd service 
+              systemctl start httpd
+              systemctl enable httpd.service
+              echo "Hello World" > /var/www/html/index.html
+              hostname >> /var/www/html/index.html
+
+  # AutoScaling Launch Config of instances with Apache
+  AutoScalingLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    DependsOn: EC2SecurityGroup
+    Properties:
+      LaunchConfigurationName: "no-public-ips"
+      ImageId: ami-05d72852800cbf29e
+      KeyName: sshkey
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      InstanceType: t2.micro
+      InstanceMonitoring: true
+      AssociatePublicIpAddress: false
+      UserData:
+        'Fn::Base64': 
+          !Sub |
+            #!/bin/bash
+            yum -y update
+            # install apache
+            yum -y install httpd  
+            # start and enable httpd service 
+            systemctl start httpd
+            systemctl enable httpd.service
+            echo "Hello World" > /var/www/html/index.html
+            hostname >> /var/www/html/index.html
+  
+  # Public IP Address to Bastion 
+  ControlPortAddress:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  # Associate EIP to MGMT Interface in bastion
+  AssociateControlPort:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ControlPortAddress.AllocationId
+      NetworkInterfaceId: !Ref MGMTInterface
+
+  # Creation of MGMT intefface to EC2 bastion 
+  MGMTInterface:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+        SubnetId: !Ref PublicSubnet1
+        Description: Interface to grant SSH access
+        GroupSet:
+          - !Ref EC2SecurityGroup
+        SourceDestCheck: true
+        Tags:
+              - Key: Network
+                Value: Control
+  
+  # Creation nic Interface in 1st PrivateSubnet
+  AccessEC2InstancesPrivSub1: 
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      Description: Interface to access EC2 Instances
+      GroupSet:
+        - !Ref EC2SecurityGroup
+      SourceDestCheck: true
+      Tags:
+            - Key: Network
+              Value: AccessEC2PrivSub1
+
+  # Creation nic Interface in 2nd PrivateSubnet
+  AccessEC2InstancesPrivSub2: 
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      Description: Interface to access EC2 Instances
+      GroupSet:
+        - !Ref EC2SecurityGroup
+      SourceDestCheck: true
+      Tags:
+            - Key: Network
+              Value: AccessEC2PrivSub2
+
+  # Creation EC2 Instance bastion to access via SSH           
+  EC2Bastion:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro	
+      ImageId: ami-05d72852800cbf29e
+      KeyName: sshkey
+      NetworkInterfaces:
+        - NetworkInterfaceId: !Ref MGMTInterface
+          DeviceIndex: '0'
+        - NetworkInterfaceId: !Ref AccessEC2InstancesPrivSub1
+          DeviceIndex: '1'
+      Tags:
+        - Key: Name
+          Value: bastion
+
+Outputs:
+  VPC:
+    Description: 'VPC created'
+    Value: !Ref 'VPC'
+  
+  LBHostname:
+    Description: 'DNS Application Load Balancer Name'
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+  AppLoadBalancer:
+    Description: 'Application Load Balancer'
+    Value:
+      Ref: ApplicationLoadBalancer
+  
