@@ -332,6 +332,9 @@ Resources:
               # start and enable httpd service 
               systemctl start httpd
               systemctl enable httpd.service
+              #install stress package
+              amazon-linux-extras install epel -y
+              yum -y install stress
               echo "Hello World" > /var/www/html/index.html
               hostname >> /var/www/html/index.html
 
@@ -358,6 +361,9 @@ Resources:
             # start and enable httpd service 
             systemctl start httpd
             systemctl enable httpd.service
+            #install stress package
+            amazon-linux-extras install epel -y
+            yum -y install stress
             echo "Hello World" > /var/www/html/index.html
             hostname >> /var/www/html/index.html
   
