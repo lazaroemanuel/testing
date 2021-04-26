@@ -275,11 +275,11 @@ Resources:
       MinSize: 2
       MaxSize: 3
       DesiredCapacity: 2
-      Cooldown: 300
+      Cooldown: 120
       TargetGroupARNs:
         - !Ref TargetGroupEC2
       HealthCheckType: "EC2"
-      HealthCheckGracePeriod: 300
+      HealthCheckGracePeriod: 60
       VPCZoneIdentifier:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
