@@ -294,7 +294,7 @@ Resources:
     Properties:
       AutoScalingGroupName: !Ref AutoScalingGroup
       PolicyType: "TargetTrackingScaling"
-      EstimatedInstanceWarmup: 300
+      EstimatedInstanceWarmup: 60
       TargetTrackingConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: "ASGAverageCPUUtilization"
