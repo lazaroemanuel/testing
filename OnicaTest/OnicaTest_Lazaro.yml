@@ -298,7 +298,7 @@ Resources:
       TargetTrackingConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: "ASGAverageCPUUtilization"
-        TargetValue: 45
+        TargetValue: 35
         DisableScaleIn: False
         
   # Deploy EC2 Web Instances Installing Apache
