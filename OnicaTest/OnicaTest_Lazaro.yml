@@ -61,7 +61,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs ]
+      AvailabilityZone: !Select [ 1, !GetAZs ]
       CidrBlock: !Ref 'PrivateSubnet2CIDR'
       MapPublicIpOnLaunch: 'False'
       Tags:
@@ -294,11 +294,11 @@ Resources:
     Properties:
       AutoScalingGroupName: !Ref AutoScalingGroup
       PolicyType: "TargetTrackingScaling"
-      EstimatedInstanceWarmup: 600
+      EstimatedInstanceWarmup: 300
       TargetTrackingConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: "ASGAverageCPUUtilization"
-        TargetValue: 70
+        TargetValue: 45
         DisableScaleIn: False
         
   # Deploy EC2 Web Instances Installing Apache
